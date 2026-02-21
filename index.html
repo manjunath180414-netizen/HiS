@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <title>SSLC Referral System</title>
 
-<!-- Firebase CDN -->
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -48,7 +48,6 @@ button {
 
 .gold { color: gold; }
 .center { text-align: center; }
-
 .hidden { display: none; }
 
 </style>
@@ -57,15 +56,12 @@ button {
 
 <h2 class="center">🔥 SSLC 2026 Crash Course</h2>
 
-<!-- AUTH SECTION -->
-<div class="card" id="authSection">
-  <h3>Register / Login</h3>
+<!-- REGISTRATION SECTION -->
+<div class="card" id="registerSection">
+  <h3>Enter Details</h3>
   <input type="text" id="name" placeholder="Your Name">
-  <input type="email" id="email" placeholder="Email">
-  <input type="password" id="password" placeholder="Password">
-  <input type="text" id="referralInput" placeholder="Referral Code (Optional)">
-  <button onclick="register()">Register</button>
-  <button onclick="login()">Login</button>
+  <input type="tel" id="phone" placeholder="Phone Number">
+  <button onclick="googleLogin()">Continue with Google</button>
 </div>
 
 <!-- DASHBOARD -->
@@ -85,6 +81,7 @@ button {
 </div>
 
 <script>
+
 /* 🔥 FIREBASE CONFIG */
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
@@ -96,69 +93,67 @@ const firebaseConfig = {
   appId: "1:462081996744:web:177127efe807c0f6b332fd",
   measurementId: "G-FXZFGYM89Y"
 };
-
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-/* AUTO FILL REFERRAL FROM LINK */
+/* GET REFERRAL FROM URL */
 const urlParams = new URLSearchParams(window.location.search);
 const refFromURL = urlParams.get('ref');
-if(refFromURL){
-  document.getElementById("referralInput").value = refFromURL;
-}
 
-/* REGISTER FUNCTION */
-async function register(){
-  const name = nameInput = document.getElementById("name").value;
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
-  const referralInput = document.getElementById("referralInput").value;
+/* GOOGLE LOGIN */
+async function googleLogin() {
+
+  const name = document.getElementById("name").value;
+  const phone = document.getElementById("phone").value;
+
+  if(!name || !phone){
+    alert("Please enter Name & Phone Number");
+    return;
+  }
+
+  const provider = new firebase.auth.GoogleAuthProvider();
 
   try{
-    const userCredential = await auth.createUserWithEmailAndPassword(email,password);
-    const user = userCredential.user;
+    const result = await auth.signInWithPopup(provider);
+    const user = result.user;
 
-    const referralCode = "SSLC" + Math.floor(1000 + Math.random() * 9000);
+    const docRef = db.collection("users").doc(user.uid);
+    const docSnap = await docRef.get();
 
-    await db.collection("users").doc(user.uid).set({
-      name: name,
-      email: email,
-      referralCode: referralCode,
-      referredBy: referralInput || null,
-      referralCount: 0,
-      unlocked: false,
-      joinedDate: new Date()
-    });
+    if(!docSnap.exists){
 
-    if(referralInput){
-      const snapshot = await db.collection("users")
-        .where("referralCode","==",referralInput).get();
+      const referralCode = "SSLC" + Math.floor(1000 + Math.random() * 9000);
 
-      snapshot.forEach(async (doc)=>{
-        const data = doc.data();
-        let newCount = data.referralCount + 1;
-
-        await db.collection("users").doc(doc.id).update({
-          referralCount: newCount,
-          unlocked: newCount >= 10
-        });
+      await docRef.set({
+        name: name,
+        phone: phone,
+        email: user.email,
+        referralCode: referralCode,
+        referredBy: refFromURL || null,
+        referralCount: 0,
+        unlocked: false,
+        joinedDate: new Date()
       });
+
+      /* Increase referral count */
+      if(refFromURL){
+        const snapshot = await db.collection("users")
+          .where("referralCode","==",refFromURL).get();
+
+        snapshot.forEach(async (doc)=>{
+          const data = doc.data();
+          let newCount = data.referralCount + 1;
+
+          await db.collection("users").doc(doc.id).update({
+            referralCount: newCount,
+            unlocked: newCount >= 10
+          });
+        });
+      }
+
     }
 
-    alert("Account Created!");
-  }catch(error){
-    alert(error.message);
-  }
-}
-
-/* LOGIN FUNCTION */
-async function login(){
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
-
-  try{
-    await auth.signInWithEmailAndPassword(email,password);
   }catch(error){
     alert(error.message);
   }
@@ -167,7 +162,8 @@ async function login(){
 /* AUTH STATE */
 auth.onAuthStateChanged(async (user)=>{
   if(user){
-    document.getElementById("authSection").classList.add("hidden");
+
+    document.getElementById("registerSection").classList.add("hidden");
     document.getElementById("dashboard").classList.remove("hidden");
 
     const doc = await db.collection("users").doc(user.uid).get();
@@ -186,9 +182,6 @@ auth.onAuthStateChanged(async (user)=>{
         "<p>Refer 10 friends to unlock FREE course.</p>";
     }
 
-  }else{
-    document.getElementById("authSection").classList.remove("hidden");
-    document.getElementById("dashboard").classList.add("hidden");
   }
 });
 
@@ -215,4 +208,4 @@ function logout(){
 </script>
 
 </body>
-  </html>
+</html>
