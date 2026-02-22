@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Agent Leads Overview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial;
+      background: #F4F6F9;
+      display: flex;
+      height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 250px;
+      background: #0B1E3D;
+      color: white;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .sidebar h3 {
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+
+    .agent-item {
+      padding: 10px;
+      cursor: pointer;
+      border-radius: 6px;
+      margin-bottom: 5px;
+    }
+
+    .agent-item:hover {
+      background: #132D5C;
+    }
+
+    .agent-item.active {
+      background: #1E3A70;
+    }
+
+    /* Main Content */
+    .main {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+      border-top: 4px solid #ccc;
+    }
+
+    .card h4 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .card p {
+      margin: 5px 0 0;
+      font-size: 14px;
+      color: gray;
+    }
+
+    .pending { border-top-color: #6c757d; }
+    .interested { border-top-color: #28a745; }
+    .notint { border-top-color: #dc3545; }
+    .wrong { border-top-color: #fd7e14; }
+    .switch { border-top-color: #ffc107; }
+    .link { border-top-color: #007bff; }
+    .verified { border-top-color: #198754; }
+
+    table {
+      width: 100%;
+      background: white;
+      border-radius: 10px;
+      border-collapse: collapse;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+    }
+
+    th {
+      background: #f1f1f1;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="sidebar">
+  <h3>Agents</h3>
+  <div id="agentList"></div>
+</div>
+
+<div class="main">
+
+  <h2 id="selectedAgentTitle">Select an Agent</h2>
+
+  <div class="cards">
+    <div class="card pending"><h4 id="assignedCount">0</h4><p>Assigned</p></div>
+    <div class="card interested"><h4 id="interestedCount">0</h4><p>Interested</p></div>
+    <div class="card notint"><h4 id="notInterestedCount">0</h4><p>Not Interested</p></div>
+    <div class="card wrong"><h4 id="wrongCount">0</h4><p>Wrong / Invalid</p></div>
+    <div class="card switch"><h4 id="switchCount">0</h4><p>Switch Off</p></div>
+    <div class="card link"><h4 id="linkCount">0</h4><p>Link Sent</p></div>
+    <div class="card verified"><h4 id="verifiedCount">0</h4><p>Verified</p></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Phone</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="leadTable"></tbody>
+  </table>
+
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, collection, onSnapshot, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC0Jf7YY9swFu_JAY-TeDfvlMCz1Iw23MU",
+  authDomain: "leadgen-da6b8.firebaseapp.com",
+  projectId: "leadgen-da6b8",
+  storageBucket: "leadgen-da6b8.firebasestorage.app",
+  messagingSenderId: "462081996744",
+  appId: "1:462081996744:web:177127efe807c0f6b332fd"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+let selectedAgent = null;
+
+onAuthStateChanged(auth, (user)=>{
+  if(!user){
+    window.location.href="index.html";
+    return;
+  }
+  loadAgents();
+});
+
+function loadAgents(){
+  onSnapshot(collection(db,"agents"), snapshot=>{
+    let html="";
+    snapshot.forEach(doc=>{
+      html+=`<div class="agent-item" onclick="selectAgent('${doc.id}','${doc.data().name}')">${doc.data().name}</div>`;
+    });
+    document.getElementById("agentList").innerHTML=html;
+  });
+}
+
+window.selectAgent = function(uid,name){
+  selectedAgent = uid;
+  document.getElementById("selectedAgentTitle").innerText = name + " - Leads";
+
+  const q = query(collection(db,"leads"), where("assignedTo","==",uid));
+
+  onSnapshot(q, snapshot=>{
+
+    let assigned=0, interested=0, notInt=0, wrong=0, sw=0, link=0, verified=0;
+    let tableHTML="";
+
+    snapshot.forEach(doc=>{
+      const data = doc.data();
+      assigned++;
+
+      if(data.status==="interested") interested++;
+      if(data.status==="not_interested") notInt++;
+      if(data.status==="invalid_number" || data.status==="wrong_number") wrong++;
+      if(data.status==="switch_off") sw++;
+      if(data.status==="link_sent") link++;
+      if(data.status==="fully_verified") verified++;
+
+      tableHTML+=`
+        <tr>
+          <td>${data.name}</td>
+          <td>${data.phone}</td>
+          <td>${data.status || "pending"}</td>
+        </tr>
+      `;
+    });
+
+    document.getElementById("assignedCount").innerText = assigned;
+    document.getElementById("interestedCount").innerText = interested;
+    document.getElementById("notInterestedCount").innerText = notInt;
+    document.getElementById("wrongCount").innerText = wrong;
+    document.getElementById("switchCount").innerText = sw;
+    document.getElementById("linkCount").innerText = link;
+    document.getElementById("verifiedCount").innerText = verified;
+
+    document.getElementById("leadTable").innerHTML = tableHTML;
+
+  });
+}
+
+</script>
+
+</body>
+</html>
