@@ -105,6 +105,18 @@
   </thead>
   <tbody id="interestedTable"></tbody>
 </table>
+  <h3>Call Back Leads</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Phone</th>
+      <th>Status</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody id="callbackTable"></tbody>
+</table>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -139,6 +151,7 @@ onAuthStateChanged(auth, async (user) => {
 
   loadNextLead();
   loadInterested();
+  loadCallback();
 });
 
 async function loadNextLead() {
@@ -261,6 +274,48 @@ window.verifyLead = async function(id){
   await updateDoc(doc(db,"leads",id),{
     status:"fully_verified",
     verifiedTime: serverTimestamp()
+  });
+};
+  function loadCallback() {
+  const q = query(
+    collection(db,"leads"),
+    where("assignedTo","==",agentUID),
+    where("status","in",["switch_off","not_received"])
+  );
+
+  onSnapshot(q, snapshot=>{
+    let html="";
+
+    snapshot.forEach(docSnap=>{
+      const data = docSnap.data();
+      const id = docSnap.id;
+
+      html+=`
+        <tr>
+          <td>${data.name}</td>
+          <td>${data.phone}</td>
+          <td>${data.status}</td>
+          <td>
+            <button class="green" onclick="moveToInterested('${id}')">Interested</button>
+            <button class="orange" onclick="keepCallback('${id}')">Not Received / Switch Off</button>
+          </td>
+        </tr>
+      `;
+    });
+
+    document.getElementById("callbackTable").innerHTML = html;
+  });
+  }
+  window.moveToInterested = async function(id){
+  await updateDoc(doc(db,"leads",id),{
+    status:"interested",
+    interestedTime: serverTimestamp()
+  });
+};
+
+window.keepCallback = async function(id){
+  await updateDoc(doc(db,"leads",id),{
+    status:"switch_off"
   });
 };
 </script>
