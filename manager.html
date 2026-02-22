@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Manager Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #F4F6F9;
+    }
+
+    .sidebar {
+      width: 240px;
+      height: 100vh;
+      background: #0B1E3D;
+      color: white;
+      position: fixed;
+      padding-top: 20px;
+    }
+
+    .sidebar h2 {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .sidebar a {
+      display: block;
+      padding: 15px 20px;
+      color: white;
+      text-decoration: none;
+    }
+
+    .sidebar a:hover {
+      background: #132D5C;
+    }
+
+    .main {
+      margin-left: 240px;
+      padding: 20px;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-top: 5px solid #ccc;
+    }
+
+    .card h3 {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .card p {
+      margin: 5px 0 0;
+      color: gray;
+    }
+
+    .green { border-top-color: #28a745; }
+    .red { border-top-color: #dc3545; }
+    .blue { border-top-color: #007bff; }
+    .orange { border-top-color: #fd7e14; }
+    .yellow { border-top-color: #ffc107; }
+    .gray { border-top-color: #6c757d; }
+
+    table {
+      width: 100%;
+      background: white;
+      border-radius: 8px;
+      border-collapse: collapse;
+      margin-top: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    table th, table td {
+      padding: 12px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+
+    table th {
+      background: #f1f1f1;
+    }
+
+    .section-title {
+      margin-top: 30px;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      color: white;
+    }
+
+    .assign-btn { background: #007bff; }
+    .equal-btn { background: #28a745; }
+    .delete-btn { background: #dc3545; }
+
+    .upload-box {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+  </style>
+</head>
+<body>
+
+<div class="sidebar">
+  <h2>Manager</h2>
+  <a href="#">Dashboard</a>
+  <a href="#">Agents</a>
+  <a href="#">Bulk Upload</a>
+  <a href="#">Unassigned Leads</a>
+  <a href="#">All Leads</a>
+</div>
+
+<div class="main">
+
+  <div class="cards">
+    <div class="card blue"><h3 id="totalLeads">0</h3><p>Total Leads</p></div>
+    <div class="card yellow"><h3 id="totalAgents">0</h3><p>Total Agents</p></div>
+    <div class="card gray"><h3 id="pending">0</h3><p>Pending</p></div>
+    <div class="card blue"><h3 id="called">0</h3><p>Called</p></div>
+    <div class="card orange"><h3 id="followUp">0</h3><p>Follow Up</p></div>
+    <div class="card red"><h3 id="wrong">0</h3><p>Wrong Number</p></div>
+    <div class="card red"><h3 id="notInterested">0</h3><p>Not Interested</p></div>
+    <div class="card green"><h3 id="verified">0</h3><p>Fully Verified</p></div>
+  </div>
+
+  <div class="section-title">Agents</div>
+  <table id="agentsTable">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Delete</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="section-title">Unassigned Leads</div>
+  <button class="equal-btn" onclick="assignEqually()">Assign Equally</button>
+  <table id="unassignedTable">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Phone</th>
+        <th>Assign</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="section-title">Bulk Upload Leads</div>
+  <div class="upload-box">
+    <input type="file" id="fileInput">
+    <button onclick="uploadLeads()">Upload</button>
+  </div>
+
+</div>
+
+<script type="module">
+
+// 🔥 Firebase Config (Replace Yours)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, collection, getDocs, addDoc, deleteDoc, doc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyC0Jf7YY9swFu_JAY-TeDfvlMCz1Iw23MU",
+  authDomain: "leadgen-da6b8.firebaseapp.com",
+  projectId: "leadgen-da6b8",
+  storageBucket: "leadgen-da6b8.firebasestorage.app",
+  messagingSenderId: "462081996744",
+  appId: "1:462081996744:web:177127efe807c0f6b332fd",
+  measurementId: "G-FXZFGYM89Y"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// 🔴 REALTIME DASHBOARD COUNTS
+onSnapshot(collection(db,"leads"), snapshot => {
+
+  let total = snapshot.size;
+  let pending=0,called=0,follow=0,wrong=0,notInt=0,verified=0;
+
+  snapshot.forEach(doc=>{
+    let s = doc.data().status;
+    if(s=="pending") pending++;
+    if(s=="called") called++;
+    if(s=="follow_up") follow++;
+    if(s=="wrong_number") wrong++;
+    if(s=="not_interested") notInt++;
+    if(s=="fully_verified") verified++;
+  });
+
+  document.getElementById("totalLeads").innerText = total;
+  document.getElementById("pending").innerText = pending;
+  document.getElementById("called").innerText = called;
+  document.getElementById("followUp").innerText = follow;
+  document.getElementById("wrong").innerText = wrong;
+  document.getElementById("notInterested").innerText = notInt;
+  document.getElementById("verified").innerText = verified;
+});
+
+// 🔴 LOAD AGENTS
+onSnapshot(collection(db,"agents"), snapshot=>{
+  document.getElementById("totalAgents").innerText = snapshot.size;
+  let html="";
+  snapshot.forEach(d=>{
+    html+=`<tr>
+      <td>${d.data().name}</td>
+      <td>${d.data().email}</td>
+      <td><button class="delete-btn" onclick="deleteAgent('${d.id}')">Delete</button></td>
+    </tr>`;
+  });
+  document.querySelector("#agentsTable tbody").innerHTML = html;
+});
+
+// 🔴 DELETE AGENT
+window.deleteAgent = async(id)=>{
+  await deleteDoc(doc(db,"agents",id));
+};
+
+// 🔴 UNASSIGNED LEADS
+onSnapshot(collection(db,"leads"), snapshot=>{
+  let html="";
+  snapshot.forEach(d=>{
+    if(!d.data().assignedTo){
+      html+=`<tr>
+        <td>${d.data().name}</td>
+        <td>${d.data().phone}</td>
+        <td><button class="assign-btn" onclick="assignLead('${d.id}')">Assign</button></td>
+      </tr>`;
+    }
+  });
+  document.querySelector("#unassignedTable tbody").innerHTML = html;
+});
+
+// 🔴 ASSIGN EQUALLY
+window.assignEqually = async()=>{
+  const agentsSnap = await getDocs(collection(db,"agents"));
+  const leadsSnap = await getDocs(collection(db,"leads"));
+
+  let agents = [];
+  agentsSnap.forEach(d=>agents.push(d.id));
+
+  let i=0;
+  for(const lead of leadsSnap.docs){
+    if(!lead.data().assignedTo){
+      await updateDoc(doc(db,"leads",lead.id),{
+        assignedTo: agents[i % agents.length]
+      });
+      i++;
+    }
+  }
+  alert("Leads Assigned Equally");
+};
+
+// 🔴 BULK UPLOAD (Simple CSV)
+window.uploadLeads = async()=>{
+  const file = document.getElementById("fileInput").files[0];
+  const text = await file.text();
+  const rows = text.split("\n");
+
+  for(const row of rows){
+    const parts = row.split(",");
+    let name = parts[0]?.trim() || "";
+    let phone = parts[1]?.trim() || "";
+
+    phone = phone.replace(/\D/g,"");
+    if(phone.length==10){
+      await addDoc(collection(db,"leads"),{
+        name:name,
+        phone:phone,
+        status:"pending",
+        assignedTo:null
+      });
+    }
+  }
+  alert("Uploaded Successfully");
+};
+
+</script>
+</body>
+          </html>
