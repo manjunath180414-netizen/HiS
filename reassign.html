@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Reassign Call Back Leads</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial;
+      background: #F4F6F9;
+      padding: 20px;
+    }
+
+    h2 {
+      margin-bottom: 15px;
+    }
+
+    .controls {
+      margin-bottom: 15px;
+    }
+
+    select, button {
+      padding: 8px;
+      margin-right: 8px;
+      border-radius: 5px;
+      border: none;
+    }
+
+    .assign-btn {
+      background: #007bff;
+      color: white;
+    }
+
+    table {
+      width: 100%;
+      background: white;
+      border-radius: 8px;
+      border-collapse: collapse;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+
+    th {
+      background: #f1f1f1;
+    }
+
+    .status-switch {
+      color: #fd7e14;
+      font-weight: bold;
+    }
+
+    .status-not {
+      color: #dc3545;
+      font-weight: bold;
+    }
+
+  </style>
+</head>
+<body>
+
+<h2>Reassign Call Back Leads</h2>
+
+<div class="controls">
+  <select id="agentSelect">
+    <option value="">Select Agent</option>
+  </select>
+
+  <button class="assign-btn" onclick="assignSelected()">Assign Selected</button>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th><input type="checkbox" id="selectAll"></th>
+      <th>Name</th>
+      <th>Phone</th>
+      <th>Status</th>
+      <th>Current Agent</th>
+    </tr>
+  </thead>
+  <tbody id="leadTable"></tbody>
+</table>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, collection, onSnapshot, getDocs, updateDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC0Jf7YY9swFu_JAY-TeDfvlMCz1Iw23MU",
+  authDomain: "leadgen-da6b8.firebaseapp.com",
+  projectId: "leadgen-da6b8",
+  storageBucket: "leadgen-da6b8.firebasestorage.app",
+  messagingSenderId: "462081996744",
+  appId: "1:462081996744:web:177127efe807c0f6b332fd"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+let agentMap = {};
+
+onAuthStateChanged(auth, (user)=>{
+  if(!user){
+    window.location.href="index.html";
+    return;
+  }
+
+  loadAgents();
+  loadCallbackLeads();
+});
+
+function loadAgents(){
+  onSnapshot(collection(db,"agents"), snapshot=>{
+    let dropdown="<option value=''>Select Agent</option>";
+    agentMap = {};
+
+    snapshot.forEach(d=>{
+      agentMap[d.id] = d.data().name;
+      dropdown+=`<option value="${d.id}">${d.data().name}</option>`;
+    });
+
+    document.getElementById("agentSelect").innerHTML = dropdown;
+  });
+}
+
+function loadCallbackLeads(){
+
+  const q = query(
+    collection(db,"leads"),
+    where("status","in",["switch_off","not_received"])
+  );
+
+  onSnapshot(q, snapshot=>{
+    let html="";
+
+    snapshot.forEach(d=>{
+      const data = d.data();
+      const agentName = agentMap[data.assignedTo] || "Unassigned";
+
+      html+=`
+        <tr>
+          <td><input type="checkbox" class="leadCheck" value="${d.id}"></td>
+          <td>${data.name}</td>
+          <td>${data.phone}</td>
+          <td class="${data.status==='switch_off'?'status-switch':'status-not'}">${data.status}</td>
+          <td>${agentName}</td>
+        </tr>
+      `;
+    });
+
+    document.getElementById("leadTable").innerHTML = html;
+  });
+}
+
+window.assignSelected = async function(){
+
+  const agentId = document.getElementById("agentSelect").value;
+  if(!agentId){
+    alert("Select agent first");
+    return;
+  }
+
+  const selected = document.querySelectorAll(".leadCheck:checked");
+  if(selected.length===0){
+    alert("Select at least one lead");
+    return;
+  }
+
+  for(const cb of selected){
+    await updateDoc(doc(db,"leads",cb.value),{
+      assignedTo: agentId,
+      status: "pending"
+    });
+  }
+
+  alert("Leads reassigned successfully");
+};
+
+document.getElementById("selectAll").addEventListener("change", function(){
+  const all = document.querySelectorAll(".leadCheck");
+  all.forEach(cb=> cb.checked = this.checked);
+});
+
+</script>
+
+</body>
+</html>
